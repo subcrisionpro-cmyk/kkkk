@@ -27,9 +27,13 @@ jobs:
           java-version: '17'
 
       - name: Setup Android NDK
-        run: |
-          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;26.1.10909125"
-          echo "ndk.dir=$ANDROID_HOME/ndk/26.1.10909125" > android/local.properties
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26d
+          local-cache: true
+
+      - name: Configure local.properties
+        run: echo "ndk.dir=$ANDROID_HOME/ndk/26.1.10909125" > android/local.properties
 
       - name: Install npm dependencies
         run: npm install
