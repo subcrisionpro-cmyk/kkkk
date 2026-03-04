@@ -49,7 +49,7 @@ jobs:
         working-directory: android
         env:
           GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g'
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleDebug --no-daemon --stacktrace --info
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
