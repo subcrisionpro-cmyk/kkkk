@@ -1,8 +1,42 @@
 // MessageBubble component - renders individual chat messages
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated, Platform } from 'react-native';
 import { COLORS, FONTS, SPACING, RADIUS } from '../theme';
 import { ChatMessage } from '../types';
+
+import Markdown from 'react-native-markdown-display';
+
+// Custom Markdown styles for dark mode
+const markdownStyles = StyleSheet.create({
+    body: {
+        color: COLORS.aiBubbleText,
+        fontSize: FONTS.sizes.md,
+        lineHeight: 22,
+    },
+    code_block: {
+        backgroundColor: COLORS.surfaceCard,
+        color: COLORS.primaryLight,
+        borderRadius: RADIUS.sm,
+        padding: SPACING.sm,
+        fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    },
+    code_inline: {
+        backgroundColor: COLORS.surfaceCard,
+        color: COLORS.primaryLight,
+        fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+        paddingHorizontal: 4,
+        borderRadius: 4,
+    },
+    fence: {
+        backgroundColor: COLORS.surfaceCard,
+        color: COLORS.primaryLight,
+        borderRadius: RADIUS.sm,
+        padding: SPACING.md,
+        fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+        marginTop: SPACING.sm,
+        marginBottom: SPACING.sm,
+    },
+});
 
 interface Props {
     message: ChatMessage;
@@ -57,17 +91,23 @@ const MessageBubble: React.FC<Props> = ({ message, isLast }) => {
                     styles.bubble,
                     isUser ? styles.userBubble : styles.aiBubble,
                 ]}>
-                <Text
-                    style={[
-                        styles.messageText,
-                        isUser ? styles.userText : styles.aiText,
-                    ]}
-                    selectable>
-                    {message.content}
-                    {message.isStreaming && (
-                        <Text style={styles.cursor}>▊</Text>
-                    )}
-                </Text>
+                {isUser ? (
+                    <Text
+                        style={[
+                            styles.messageText,
+                            styles.userText,
+                        ]}
+                        selectable>
+                        {message.content}
+                    </Text>
+                ) : (
+                    <View>
+                        <Markdown style={markdownStyles}>
+                            {message.content + (message.isStreaming ? ' ▊' : '')}
+                        </Markdown>
+                    </View>
+                )}
+
                 <Text
                     style={[
                         styles.timestamp,

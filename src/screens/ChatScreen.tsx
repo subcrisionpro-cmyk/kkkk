@@ -16,6 +16,8 @@ import { ChatMessage } from '../types';
 import MessageBubble from '../components/MessageBubble';
 import ChatInput from '../components/ChatInput';
 import LlamaService from '../services/LlamaService';
+import StorageService from '../services/StorageService';
+import SettingsModal, { AISettings, DEFAULT_SETTINGS } from '../components/SettingsModal';
 
 interface Props {
     modelName: string;
@@ -25,6 +27,8 @@ interface Props {
 const ChatScreen: React.FC<Props> = ({ modelName, onBack }) => {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [settingsVisible, setSettingsVisible] = useState(false);
+    const [aiSettings, setAiSettings] = useState<AISettings>(DEFAULT_SETTINGS);
     const flatListRef = useRef<FlatList>(null);
     const headerAnim = useRef(new Animated.Value(0)).current;
 
@@ -35,15 +39,29 @@ const ChatScreen: React.FC<Props> = ({ modelName, onBack }) => {
             useNativeDriver: true,
         }).start();
 
-        // Add welcome message
-        const welcome: ChatMessage = {
-            id: 'welcome',
-            role: 'assistant',
-            content: `Hello! I'm your offline AI assistant powered by ${modelName}. I run entirely on your device — no internet needed! 🔒\n\nHow can I help you today?`,
-            timestamp: Date.now(),
+        const loadData = async () => {
+            const history = await StorageService.loadChatHistory(modelName);
+            if (history && history.length > 0) {
+                setMessages(history);
+            } else {
+                // Add welcome message if no history
+                const welcome: ChatMessage = {
+                    id: 'welcome',
+                    role: 'assistant',
+                    content: `Hello! I'm your offline AI assistant powered by ${modelName}. I run entirely on your device — no internet needed! 🔒\n\nHow can I help you today?`,
+                    timestamp: Date.now(),
+                };
+                setMessages([welcome]);
+            }
+
+            const savedSettings = await StorageService.loadSettings();
+            if (savedSettings) {
+                setAiSettings(savedSettings);
+            }
         };
-        setMessages([welcome]);
-    }, []);
+
+        loadData();
+    }, [modelName, headerAnim]);
 
     const scrollToBottom = useCallback(() => {
         setTimeout(() => {
@@ -62,7 +80,9 @@ const ChatScreen: React.FC<Props> = ({ modelName, onBack }) => {
             timestamp: Date.now(),
         };
 
-        setMessages(prev => [...prev, userMessage]);
+        const newMessagesWithUser = [...messages, userMessage];
+        setMessages(newMessagesWithUser);
+        StorageService.saveChatHistory(modelName, newMessagesWithUser);
         scrollToBottom();
 
         // Create AI message placeholder
@@ -87,15 +107,30 @@ const ChatScreen: React.FC<Props> = ({ modelName, onBack }) => {
             chatHistory.push({ role: 'user', content: text });
 
             // Stream response
-            await LlamaService.generateResponse(chatHistory, (token: string) => {
-                setMessages(prev =>
-                    prev.map(m =>
-                        m.id === aiMessageId
-                            ? { ...m, content: m.content + token }
-                            : m,
-                    ),
+            let finalAiMessage = '';
+            await LlamaService.generateResponse(
+                chatHistory,
+                (token: string) => {
+                    finalAiMessage += token;
+                    setMessages(prev =>
+                        prev.map(m =>
+                            m.id === aiMessageId
+                                ? { ...m, content: m.content + token }
+                                : m,
+                        ),
+                    );
+                    scrollToBottom();
+                },
+                aiSettings
+            );
+
+            // Save after generation completes
+            setMessages(prev => {
+                const finalMessages = prev.map(m =>
+                    m.id === aiMessageId ? { ...m, isStreaming: false } : m
                 );
-                scrollToBottom();
+                StorageService.saveChatHistory(modelName, finalMessages);
+                return finalMessages;
             });
 
             // Mark streaming as done
@@ -155,32 +190,39 @@ const ChatScreen: React.FC<Props> = ({ modelName, onBack }) => {
                             },
                         ],
                     },
-                ]}>
-                <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={onBack}
-                    activeOpacity={0.7}>
-                    <Text style={styles.backText}>‹</Text>
+                ]}
+            >
+                <TouchableOpacity onPress={onBack} style={styles.backButton}>
+                    <Text style={styles.backText}>← Back</Text>
                 </TouchableOpacity>
-
-                <View style={styles.headerCenter}>
-                    <Text style={styles.headerTitle}>Offline Chat</Text>
-                    <View style={styles.statusRow}>
-                        <View
-                            style={[
-                                styles.statusDot,
-                                { backgroundColor: isGenerating ? COLORS.warning : COLORS.success },
-                            ]}
-                        />
-                        <Text style={styles.headerSubtitle} numberOfLines={1}>
-                            {isGenerating ? 'Thinking...' : modelName}
-                        </Text>
-                    </View>
+                <View style={styles.headerTitleContainer}>
+                    <Text style={styles.headerTitle}>AI Assistant</Text>
+                    <Text style={styles.modelTag} numberOfLines={1} ellipsizeMode="middle">
+                        {modelName}
+                    </Text>
                 </View>
-
-                <View style={styles.headerRight}>
-                    <Text style={styles.offlineBadge}>🔒 Offline</Text>
-                </View>
+                <TouchableOpacity
+                    onPress={() => setSettingsVisible(true)}
+                    style={styles.settingsButton}
+                >
+                    <Text style={styles.settingsIcon}>⚙️</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    onPress={() => {
+                        StorageService.clearChatHistory(modelName);
+                        // Reset to just welcome message
+                        const welcome: ChatMessage = {
+                            id: 'welcome',
+                            role: 'assistant',
+                            content: `Hello! I'm your offline AI assistant powered by ${modelName}. I run entirely on your device — no internet needed! 🔒\n\nHow can I help you today?`,
+                            timestamp: Date.now(),
+                        };
+                        setMessages([welcome]);
+                    }}
+                    style={styles.clearButton}
+                >
+                    <Text style={styles.clearText}>Clear</Text>
+                </TouchableOpacity>
             </Animated.View>
 
             {/* Messages */}
@@ -200,11 +242,13 @@ const ChatScreen: React.FC<Props> = ({ modelName, onBack }) => {
                 />
 
                 {/* Typing indicator */}
-                {isGenerating && (
-                    <View style={styles.typingIndicator}>
-                        <TypingDots />
-                    </View>
-                )}
+                {
+                    isGenerating && (
+                        <View style={styles.typingIndicator}>
+                            <TypingDots />
+                        </View>
+                    )
+                }
 
                 <ChatInput
                     onSend={handleSend}
@@ -213,7 +257,16 @@ const ChatScreen: React.FC<Props> = ({ modelName, onBack }) => {
                         isGenerating ? 'AI is thinking...' : 'Type your message...'
                     }
                 />
-            </KeyboardAvoidingView>
+            </KeyboardAvoidingView >
+
+            <SettingsModal
+                visible={settingsVisible}
+                onClose={() => setSettingsVisible(false)}
+                onSave={(newSettings) => {
+                    setAiSettings(newSettings);
+                    setSettingsVisible(false);
+                }}
+            />
         </View>
     );
 };
@@ -322,7 +375,7 @@ const styles = StyleSheet.create({
         fontWeight: '300',
         marginTop: -2,
     },
-    headerCenter: {
+    headerTitleContainer: {
         flex: 1,
         marginLeft: SPACING.md,
     },
@@ -330,6 +383,28 @@ const styles = StyleSheet.create({
         fontSize: FONTS.sizes.lg,
         fontWeight: '700',
         color: COLORS.textPrimary,
+    },
+    modelTag: {
+        fontSize: 12,
+        color: COLORS.textSecondary,
+        fontFamily: FONTS.regular,
+        opacity: 0.8,
+        maxWidth: 200,
+    },
+    clearButton: {
+        padding: SPACING.md,
+    },
+    settingsButton: {
+        padding: SPACING.md,
+        marginRight: -SPACING.md,
+    },
+    settingsIcon: {
+        fontSize: 18,
+    },
+    clearText: {
+        fontSize: 14,
+        color: COLORS.error || '#ef4444',
+        fontFamily: FONTS.medium,
     },
     statusRow: {
         flexDirection: 'row',

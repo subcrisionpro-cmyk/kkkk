@@ -47,6 +47,7 @@ class LlamaService {
     async generateResponse(
         messages: Array<{ role: string; content: string }>,
         onToken?: (token: string) => void,
+        settings?: any,
     ): Promise<string> {
         if (!this.context) {
             throw new Error('Model not loaded. Please load a model first.');
@@ -58,14 +59,22 @@ class LlamaService {
 
             let fullResponse = '';
 
+            const defaultOpts = {
+                n_predict: 512,
+                temperature: 0.7,
+                top_k: 40,
+                top_p: 0.95,
+            };
+
+            const runOpts = { ...defaultOpts, ...settings };
+
             const result = await this.context.completion(
                 {
                     prompt,
-                    n_predict: 512,
-                    temperature: 0.7,
-                    top_k: 40,
-                    top_p: 0.95,
-                    repeat_penalty: 1.1,
+                    n_predict: runOpts.n_predict,
+                    temperature: runOpts.temperature,
+                    top_k: runOpts.top_k,
+                    top_p: runOpts.top_p,
                     stop: ['<end_of_turn>', '<eos>', '</s>', 'User:', 'Human:'],
                 },
                 (data: any) => {
