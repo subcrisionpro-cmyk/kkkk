@@ -1,18 +1,48 @@
 workflows:
   android-debug-build:
     name: Build Android Debug APK
-    max_build_duration: 60
-    instance_type: linux
+    max_build_duration: 90
+    instance_type: linux_x2
     environment:
-      node: 20
+      node: 22.11.0
       java: 17
+      android_signing:
+        - debug_keystore
+      vars:
+        ANDROID_HOME: /usr/local/share/android-sdk
     scripts:
-      - name: Install dependencies
+      - name: Install Node dependencies
         script: npm install
+      - name: Install Android NDK 26.3.11579264
+        script: |
+          sdkmanager "ndk;26.3.11579264" --sdk_root=$ANDROID_HOME
       - name: Build Android Debug APK
         script: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace --info
+          ./gradlew assembleDebug --no-daemon --stacktrace
     artifacts:
       - android/app/build/outputs/apk/debug/app-debug.apk
+
+  android-release-build:
+    name: Build Android Release APK
+    max_build_duration: 90
+    instance_type: linux_x2
+    environment:
+      node: 22.11.0
+      java: 17
+      vars:
+        ANDROID_HOME: /usr/local/share/android-sdk
+    scripts:
+      - name: Install Node dependencies
+        script: npm install
+      - name: Install Android NDK 26.3.11579264
+        script: |
+          sdkmanager "ndk;26.3.11579264" --sdk_root=$ANDROID_HOME
+      - name: Build Android Release APK
+        script: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+    artifacts:
+      - android/app/build/outputs/apk/release/app-release-unsigned.apk
