@@ -1,0 +1,47 @@
+name: Render Manim Animation
+
+on:
+  repository_dispatch:
+    types: [render-manim]
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: manim-pip-${{ runner.os }}-v1
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg libcairo2-dev libpango1.0-dev texlive-full > /dev/null 2>&1
+
+      - name: Install Manim
+        run: pip install manim==0.18.1 -q
+
+      - name: Render scene
+        run: |
+          SCENE="${{ github.event.client_payload.scene_class }}"
+          QUALITY="${{ github.event.client_payload.quality }}"
+          echo "Rendering: $SCENE (quality: $QUALITY)"
+          manim scene.py $SCENE -q$QUALITY -v WARNING --disable_caching
+        env:
+          DISPLAY: ":99"
+
+      - name: Upload video artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: manim-video
+          path: media/videos/scene/**/*.mp4
+          retention-days: 7
